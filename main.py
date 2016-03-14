@@ -144,18 +144,20 @@ class MainWindow(Widget):
             self.config.write(f)
 
     def showSelectDevice(self, relativeTo):
-        devices = IOT.getDevices('2dx8VTfEv3WeJuNBEV9iZuc7')
+        grounds = IOT.getGrounds(False)
 
         dropdown = DropDown() # auto_width=False, width='140dp'
-        for dev in devices:
-            btn = Button(size_hint_y=None, height='32dp')
-            btn.DeviceId = dev['id']
-            if dev['title']:
-                btn.text=dev['title']             # for old devices that didn't ahve a title yet.
-            else:
-                btn.text=dev['name']
-            btn.bind(on_release=lambda btn: self.selectDevice(btn.parent.parent, btn.DeviceId, btn.text))
-            dropdown.add_widget(btn)
+        for ground in grounds:
+            devices = IOT.getDevices(ground['id'])
+            for dev in devices:
+                btn = Button(size_hint_y=None, height='32dp')
+                btn.DeviceId = dev['id']
+                if dev['title']:
+                    btn.text=dev['title']             # for old devices that didn't ahve a title yet.
+                else:
+                    btn.text=dev['name']
+                btn.bind(on_release=lambda btn: self.selectDevice(btn.parent.parent, btn.DeviceId, btn.text))
+                dropdown.add_widget(btn)
         dropdown.open(relativeTo)
 
     def showCredentialsDlg(self):
