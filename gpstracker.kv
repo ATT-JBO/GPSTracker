@@ -1,0 +1,92 @@
+#:kivy 1.9.1
+
+<CredentialsDialog>:
+    userNameInput: txtUserName
+    pwdInput: txtPwd
+    serverInput: txtServer
+    brokerInput: txtBroker
+    auto_dismiss: False
+    title: 'Credentials'
+    size_hint: None, None
+    width: '300dp'
+    height:  grdMain.minimum_height + dp(60) # '440dp'
+    pos_hint:{'center_x': .5, 'center_y': .5}
+    GridLayout:
+        id: grdMain
+        cols: 1
+        spacing: '8dp'
+        size_hint: 1, 1
+		padding: '10dp'
+        TextInput:
+            id: txtUserName
+            focus: True
+            write_tab: False
+            hint_text: 'User name'
+            size_hint_y: None
+            height:'32dp'
+        TextInput:
+            id: txtPwd
+            write_tab: False
+            hint_text: 'Password'
+            size_hint_y: None
+            height:'32dp'
+        TextInput:
+            id: txtServer
+            write_tab: False
+            hint_text: 'server address'
+            size_hint_y: None
+            height:'32dp'
+        TextInput:
+            id: txtBroker
+            write_tab: False
+            hint_text: 'broker address'
+            size_hint_y: None
+            height:'32dp'
+        Button:
+            text: 'Cancel'
+            on_press: root.dismiss()
+            size_hint_y: None
+            height:'32dp'
+        Button:
+            text: 'Ok'
+            on_press: root.dismissOk()
+            size_hint_y: None
+            height:'32dp'
+
+
+<MainWindow>:
+    GridLayout:
+        size: root.size
+        pos: root.pos
+        cols: 1
+        padding: '8dp'
+        spacing: '8dp'
+        Button:
+            text:'set credentials'
+            size_hint_y: None
+            height: '40dp'
+            on_release: root.showCredentialsDlg()
+        Button:
+            text: root.selectedDeviceName
+            size_hint_y: None
+            height: '40dp'
+            on_release: root.showSelectDevice(self)
+        Label:
+            text: 'going to: ' + root.destination
+            size_hint_y: None
+            height: '120dp'
+        BoxLayout:
+            size_hint_y: None
+            height: '40dp'
+            Button:
+                text: 'fine'
+                on_release: root.startService('fine')
+                disabled: root.isRunning
+            Button:
+                text: 'coarse'
+                on_release: root.startService('coarse')
+                disabled: root.isRunning
+            Button:
+                text: 'Stop'
+                disabled: not root.isRunning
+                on_release: root.stopService()
