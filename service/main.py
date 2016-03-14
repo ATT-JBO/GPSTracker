@@ -18,9 +18,6 @@ import datetime
 
 import gpssensor as sensors
 
-iot.ClientId = "Geotrigger"
-iot.ClientKey = "se14uwnwlgq"
-
 IPCPort = 3000
 IPCServicePort = 3001
 gpsId = 10
@@ -64,7 +61,9 @@ if __name__ == '__main__':
         osc.bind(oscid, device_callback, '/device')
         osc.bind(oscid, stop_callback, '/stop')
         splitVal = os.getenv('PYTHON_SERVICE_ARGUMENT').split('|')
-        if len(splitVal) > 1:
+        if len(splitVal) > 3:
+            iot.ClientId = splitVal[2]
+            iot.ClientKey = splitVal[3]
             device_callback(splitVal[1])
         if splitVal[0] == 'fine':
             gpsService = sensors.GPSFineSensor()

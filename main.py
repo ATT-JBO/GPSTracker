@@ -209,7 +209,7 @@ class MainWindow(Widget):
             from android import AndroidService
             service = AndroidService('my gps service', 'running')
             if self.device:
-                service.start(level + '|' + self.device)
+                service.start(level + '|' + self.device + '|' + self.credentials.userName + '|' + IOT._brokerPwd)
             else:
                 service.start(level)
             self.service = service
