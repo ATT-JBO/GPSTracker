@@ -19,22 +19,18 @@ from kivy.properties import StringProperty, BooleanProperty, ObjectProperty
 from kivy.utils import platform
 from kivy.lib import osc
 
+
 from ConfigParser import *
 
 import attiotuserclient as IOT
 from errors import *
+import data
 
 
 appConfigFileName = 'app.config'
 IPCPort = 3000
 IPCServicePort = 3001
 
-class Credentials():
-    def __init__(self):
-        self.userName = ''
-        self.password = ''
-        self.server = ''
-        self.broker = ''
 
 class CredentialsDialog(Popup):
     "set credentials"
@@ -72,7 +68,24 @@ class CredentialsDialog(Popup):
             self.callback(credentials)
         self.dismiss()
 
+def getRunningService():
+    '''check if service is running '''
+    from plyer.platforms.android import activity
+    from jnius import autoclass
+    import sys
+    Context = autoclass('android.content.Context')
+    manager = activity.getSystemService(Context.ACTIVITY_SERVICE)
+    for myService in manager.getRunningServices(sys.maxint).toArray():
+        if str(myService.service.flattenToString()) == "gpstracker.org.test.gpstracker/org.renpy.android.PythonService":
+            return myService
+    return None
 
+def connect():
+    try:
+        IOT.connect(data.credentials.userName, data.credentials.password,data.credentials.server, data.credentials.broker)
+        logging.info("connected")
+    except Exception as e:
+        showError(e)
 
 def IPCCallback(message, *args):
     logging.info('got message: %s' % message)
@@ -83,12 +96,16 @@ class MainWindow(Widget):
     isRunning = BooleanProperty(False)
 
     def __init__(self, **kwargs):
-        self.service = None
+        if platform == 'android':
+            self.service = getRunningService()
+            self.isRunning = self.service != None
+        else:
+            self.service = None
+            self.isRunning = False
         super(MainWindow, self).__init__(**kwargs)
 
     def getSettings(self):
         self.config = ConfigParser()
-        self.credentials = Credentials()
         if self.config.read(appConfigFileName):
             if self.config.has_option('general', 'device'):
                 self.device = self.config.get('general', 'device')
@@ -98,17 +115,23 @@ class MainWindow(Widget):
                 self.asset = self.config.get('general', 'asset')
             else:
                 self.asset = None
-            if self.config.has_option('general', 'isRunning'):
-                self.isRunning = self.config.get('general', 'isRunning')
 
             if self.config.has_option('general', 'userName'):
-                self.credentials.userName = self.config.get('general', 'userName')
+                data.credentials.userName = self.config.get('general', 'userName')
+            else:
+                data.credentials.userName = "Geotrigger"
             if self.config.has_option('general', 'password'):
-                self.credentials.password = self.config.get('general', 'password')
+                data.credentials.password = self.config.get('general', 'password')
+            else:
+                data.credentials.password = "Att953953"
             if self.config.has_option('general', 'server'):
-                self.credentials.server = self.config.get('general', 'server')
+                data.credentials.server = self.config.get('general', 'server')
+            else:
+                data.credentials.server = "api.smartliving.io"
             if self.config.has_option('general', 'broker'):
-                self.credentials.broker = self.config.get('general', 'broker')
+                data.credentials.broker = self.config.get('general', 'broker')
+            else:
+                data.credentials.broker = "broker.smartliving.io"
 
         else:
             self.device = None
@@ -123,23 +146,15 @@ class MainWindow(Widget):
                 else:
                     self.selectedDeviceName = dev['name']
 
-    def on_isRunning(self, instance, value):
-        """save the isRunning state, so we know the correct value, next time the app is opened"""
-        if not self.config.has_section('general'):
-            self.config.add_section('general')
-        self.config.set('general', 'isRunning', value)
-        with open(appConfigFileName, 'w') as f:
-            self.config.write(f)
-
     def saveConfig(self):
         if not self.config.has_section('general'):
             self.config.add_section('general')
         self.config.set('general', 'device', self.device)
         self.config.set('general', 'asset', self.asset)
-        self.config.set('general', 'userName', self.credentials.userName)
-        self.config.set('general', 'password', self.credentials.password)
-        self.config.set('general', 'server', self.credentials.server)
-        self.config.set('general', 'broker', self.credentials.broker)
+        self.config.set('general', 'userName', data.credentials.userName)
+        self.config.set('general', 'password', data.credentials.password)
+        self.config.set('general', 'server', data.credentials.server)
+        self.config.set('general', 'broker', data.credentials.broker)
         with open(appConfigFileName, 'w') as f:
             self.config.write(f)
 
@@ -161,22 +176,15 @@ class MainWindow(Widget):
         dropdown.open(relativeTo)
 
     def showCredentialsDlg(self):
-        dlg = CredentialsDialog(self.credentials, self.credentialsChanged)
+        dlg = CredentialsDialog(data.credentials, self.credentialsChanged)
         dlg.open()
 
     def credentialsChanged(self, newCredentials):
         IOT.disconnect(False)
-        self.credentials = newCredentials
-        self.connect()
+        data.credentials = newCredentials
+        connect()
         self.updateDevName()
         self.saveConfig()
-
-    def connect(self):
-        try:
-            IOT.connect(self.credentials.userName, self.credentials.password,self.credentials.server, self.credentials.broker)
-            logging.info("connected")
-        except Exception as e:
-            showError(e)
 
     def selectDevice(self, dropdown, deviceId, title):
         if dropdown:
@@ -207,29 +215,32 @@ class MainWindow(Widget):
         self.isRunning = True
         if platform == 'android':
             from android import AndroidService
-            service = AndroidService('my gps service', 'running')
+            if not self.service:
+                self.service = AndroidService('my gps service', 'running')
             if self.device:
-                service.start(level + '|' + self.device + '|' + self.credentials.userName + '|' + IOT._brokerPwd)
+                self.service.start(level + '|' + self.device + '|' + data.credentials.userName + '|' + IOT._brokerPwd)
             else:
-                service.start(level)
-            self.service = service
+                self.service.start(level)
 
     def stopService(self):
         if self.isRunning:
             if self.service:
                 osc.sendMsg('/stop', [''], port=IPCServicePort)
-                self.service.stop()
+                try:
+                    self.service.stop()
+                except Exception as e:
+                    logging.exception('failed to stop service (need to do activity.stopService()')
+
         self.isRunning = False
 
 
 class GpsTrackerApp(App):
     def build(self):
-        self.credentials = None
         osc.init()
         res = MainWindow()
         res.getSettings()
-        if res.credentials.userName and res.credentials.password:
-            res.connect()
+        if data.credentials.userName and data.credentials.password:
+            connect()
             res.updateDevName()
         return res
 
@@ -239,7 +250,7 @@ class GpsTrackerApp(App):
         return True
 
     def on_resume(self):
-        self.connect()
+        connect()
 
     def on_stop(self):
         IOT.disconnect(False)
