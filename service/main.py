@@ -51,6 +51,7 @@ def stop_callback(message, *args):
         gpsService.stop()
         gpsService = None
         isStopped = True
+        logging.info("stopped gps")
 
 gpsService = None
 

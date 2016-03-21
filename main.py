@@ -18,6 +18,8 @@ from kivy.uix.button import Button
 from kivy.properties import StringProperty, BooleanProperty, ObjectProperty
 from kivy.utils import platform
 from kivy.lib import osc
+if platform == 'android':
+    from android import AndroidService
 
 
 from ConfigParser import *
@@ -68,7 +70,7 @@ class CredentialsDialog(Popup):
             self.callback(credentials)
         self.dismiss()
 
-def getRunningService():
+def isServiceRunning():
     '''check if service is running '''
     from plyer.platforms.android import activity
     from jnius import autoclass
@@ -77,8 +79,8 @@ def getRunningService():
     manager = activity.getSystemService(Context.ACTIVITY_SERVICE)
     for myService in manager.getRunningServices(sys.maxint).toArray():
         if str(myService.service.flattenToString()) == "gpstracker.org.test.gpstracker/org.renpy.android.PythonService":
-            return myService
-    return None
+            return True
+    return False
 
 def connect():
     try:
@@ -97,8 +99,11 @@ class MainWindow(Widget):
 
     def __init__(self, **kwargs):
         if platform == 'android':
-            self.service = getRunningService()
-            self.isRunning = self.service != None
+            self.isRunning = isServiceRunning()
+            if self.isRunning:
+                self.service = AndroidService('my gps service', 'running')
+            else:
+                self.service = None
         else:
             self.service = None
             self.isRunning = False
@@ -214,7 +219,6 @@ class MainWindow(Widget):
     def startService(self, level):
         self.isRunning = True
         if platform == 'android':
-            from android import AndroidService
             if not self.service:
                 self.service = AndroidService('my gps service', 'running')
             if self.device:
