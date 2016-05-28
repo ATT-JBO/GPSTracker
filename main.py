@@ -18,6 +18,7 @@ from kivy.uix.button import Button
 from kivy.properties import StringProperty, BooleanProperty, ObjectProperty
 from kivy.utils import platform
 from kivy.lib import osc
+from kivy.clock import Clock
 if platform == 'android':
     from android import AndroidService
 
@@ -94,6 +95,7 @@ def IPCCallback(message, *args):
 
 class MainWindow(Widget):
     destination = StringProperty('Unknown')
+    currentstatus = StringProperty('not yet started')
     selectedDeviceName = StringProperty('Select device')
     isRunning = BooleanProperty(False)
 
@@ -102,6 +104,7 @@ class MainWindow(Widget):
             self.isRunning = isServiceRunning()
             if self.isRunning:
                 self.service = AndroidService('my gps service', 'running')
+                self.currentstatus = "service was running"
             else:
                 self.service = None
         else:
@@ -232,21 +235,33 @@ class MainWindow(Widget):
                 osc.sendMsg('/stop', [''], port=IPCServicePort)
                 try:
                     self.service.stop()
+                    self.currentstatus = "GPS stopped"
                 except Exception as e:
-                    logging.exception('failed to stop service (need to do activity.stopService()')
+                    logging.exception('failed to stop service')
+                    self.currentstatus = "failed to stop service: " + e.message
 
         self.isRunning = False
 
+    def on_update_from_service(self, message, *args):
+        self.currentstatus = message[2]
 
 class GpsTrackerApp(App):
     def build(self):
-        osc.init()
-        res = MainWindow()
-        res.getSettings()
+        self.main = MainWindow()
+        self.main.getSettings()
         if data.credentials.userName and data.credentials.password:
             connect()
-            res.updateDevName()
-        return res
+            self.main.updateDevName()
+        self.setupOsc()
+        return self.main
+
+
+
+    def setupOsc(self):
+        osc.init()
+        oscid = osc.listen(ipAddr='127.0.0.1', port=IPCPort)
+        osc.bind(oscid, self.main.on_update_from_service, '/update')
+        Clock.schedule_interval(lambda *x: osc.readQueue(oscid), 0)
 
 
     def on_pause(self):                         # can get called multiple times, sometimes no memory objects are set

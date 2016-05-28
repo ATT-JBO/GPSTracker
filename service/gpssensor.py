@@ -29,7 +29,8 @@ class _LocationListener(PythonJavaClass):
             speed=location.getSpeed(),
             bearing=location.getBearing(),
             altitude=location.getAltitude(),
-            accuracy=location.getAccuracy())
+            accuracy=location.getAccuracy(),
+            time=location.getTime())
 
     @java_method('(Ljava/lang/String;)V')
     def onProviderEnabled(self, status):

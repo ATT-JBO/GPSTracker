@@ -90,3 +90,7 @@
                 text: 'Stop'
                 disabled: not root.isRunning
                 on_release: root.stopService()
+        Label:
+            text: root.currentstatus
+            size_hint_y: None
+            height: '120dp'

@@ -12,7 +12,9 @@ import attiot as iot
 
 from time import sleep
 import os
-from plyer import gps
+#from plyer import gps
+from plyer import accelerometer
+from plyer import battery
 from kivy.lib import osc
 import datetime
 
@@ -21,47 +23,96 @@ import gpssensor as sensors
 IPCPort = 3000
 IPCServicePort = 3001
 gpsId = 10
+batteryId = 11
+gpsCoordId = 12
+stateId = 13
+gpsMinTime = 60000  #milli seconds
+gpsMinDistance = 80
+
 
 #callback: handles values sent from the cloudapp to the device
 def on_message(id, value):
     logging.info("unknown actuator: " + id)
 iot.on_message = on_message
 
+gpsRunning = False
 isStopped = False
+gpsService = None
+prevGPSData = None
+prevBattery = None
+prevAccel = None
+lastGPSMeasuredAt = None
 
 def on_location(**kwargs):
     try:
+        global prevGPSData, lastGPSMeasuredAt
+        if prevGPSData and round(kwargs['lat'], 4) == prevGPSData['lat'] and round(kwargs['lon'], 4) == prevGPSData['lon']: #same location, so stop the gps
+            pauseGPSService()
+        else:
+            lastGPSMeasuredAt = datetime.datetime.now()
+        prevGPSData = {'lat': round(kwargs['lat'], 4), 'lon': round(kwargs['lon'], 4)}
         if iot.DeviceId:                                            # could be that we are not yet connected.
             iot.send("{lat},{lon}".format(**kwargs), gpsId)
+            iot.send(str(prevGPSData), gpsCoordId)                  # for easy tracking on a map.
     except Exception as e:
+        sendMsg('on_location failed: ' + e.message)
         logging.exception("on_location failed")
 
+#def isBetterLocation(prev, current):
+#    if not prev:
+#        return True
+#    timeDelta = current['time'] - prev['time']
+#    isReall
+
+def sendMsg(message):
+    """sends a message to the platform and to the UI part of the app."""
+    osc.sendMsg('/update', [message, ], port=IPCPort)
+    iot.send(message, stateId)
+
 def device_callback(message, *args):
-    logging.info("got a message! %s" % message)
-    iot.DeviceId = message
-    if iot.DeviceId:
-        iot.connect()
-        iot.addAsset(gpsId, "location - new", "location, using new lib", False, "string")
-        iot.subscribe()
+    try:
+        iot.DeviceId = message
+        if iot.DeviceId:
+            iot.connect()
+            iot.addAsset(gpsId, "location - new", "location, using new lib", False, "string")
+            iot.addAsset(stateId, "state", "current state of the device", False, "string")
+            iot.addAsset(gpsCoordId, "location - coordinates", "location, using new lib, expresed in coordinates", False, '{"type": "object","properties": {"lat": { "type": "number" },"lon": { "type": "number" }}}')
+            iot.addAsset(batteryId, "battery level", "current battery level", False, "number")
+            iot.subscribe()
+    except Exception as e:
+        sendMsg('failed to connect to ATT: ' + e.message)
+        logging.exception("failed to connect to ATT")
 
 def stop_callback(message, *args):
-    global isStopped, gpsService
+    global gpsService, isStopped
+    logging.info("stopping gps")
+    pauseGPSService(False)
+    gpsService = None
+    sendMsg('stopped gps')
+    isStopped = True
+    logging.info("stopped gps")
+
+
+def pauseGPSService(activateAcceleroMeter = True):
+    """stops the gps service but without destroying it, so it will pick up again once the user starts moving."""
+    global isStopped, gpsService, gpsRunning
     if gpsService:
-        logging.info("stopping gps")
-        gpsService.stop()
-        gpsService = None
-        isStopped = True
-        logging.info("stopped gps")
+        try:
+            logging.info("pausing gps")
+            gpsService.stop()
+            if activateAcceleroMeter:
+                accelerometer.enable()
+            gpsRunning = False
+            logging.info("paused gps")
+            sendMsg('paused gps')
+        except Exception as e:
+            sendMsg('failed to pause GPS: ' + e.message)
+            logging.exception("failed to pause gps")
 
-gpsService = None
-
-if __name__ == '__main__':
+def createGPSService():
+    global gpsService
+    splitVal = os.getenv('PYTHON_SERVICE_ARGUMENT').split('|')
     try:
-        osc.init()
-        oscid = osc.listen(ipAddr='127.0.0.1', port=IPCServicePort)
-        osc.bind(oscid, device_callback, '/device')
-        osc.bind(oscid, stop_callback, '/stop')
-        splitVal = os.getenv('PYTHON_SERVICE_ARGUMENT').split('|')
         if len(splitVal) > 3:
             iot.ClientId = splitVal[2]
             iot.ClientKey = splitVal[3]
@@ -72,12 +123,68 @@ if __name__ == '__main__':
             gpsService = sensors.GPSCoarseSensor()
         else:
             gpsService = None
-        if gpsService:
+            sendMsg("unknown gps logging level requested: " + splitVal)
+            logging.error("unknown gps logging level requested: " + splitVal)
+    except Exception as e:
+        sendMsg('failed to create GPS: ' + e.message)
+        logging.exception("failed to create gps")
+
+def startGPS():
+    """start up the GPS"""
+    global batteryAtStart, gpsRunning, lastGPSMeasuredAt, prevAccel
+    if gpsService:
+        try:
             gpsService.configure(on_location=on_location)
-            gpsService.start(15000, 15)
+            gpsService.start(gpsMinTime, gpsMinDistance)
+            accelerometer.disable()
+            prevAccel = None
             logging.info("gps started")
+            sendMsg('gps started')
+            lastGPSMeasuredAt = datetime.datetime.now()
+            gpsRunning = True
+        except Exception as e:
+            sendMsg('failed to start GPS: ' + e.message)
+            logging.exception("failed to start gps")
+
+def startOsc():
+    """start up the communication between service and main app"""
+    osc.init()
+    oscid = osc.listen(ipAddr='127.0.0.1', port=IPCServicePort)
+    osc.bind(oscid, device_callback, '/device')
+    osc.bind(oscid, stop_callback, '/stop')
+    return oscid
+
+
+def processBattery():
+    global prevBattery
+    try:
+        curVal = battery.status['percentage']
+        if not prevBattery or curVal != prevBattery:
+            iot.send(curVal, batteryId)
+        prevBattery = curVal
+    except Exception as e:
+        sendMsg('failed to update battery: ' + e.message)
+        logging.exception("failed to update battery")
+
+
+def checkAcceleroMeter():
+    global prevAccel
+    if accelerometer.acceleration and not None in accelerometer.acceleration:
+        curCal = sum(accelerometer.acceleration)
+        if not prevAccel:
+            prevAccel = curCal
+        elif prevAccel + 5 <= curCal or prevAccel - 5 >= curCal:
+            startGPS()
         else:
-            logging.error("unknown gps logging level requested: " + level)
+            prevAccel = curCal
+
+
+
+if __name__ == '__main__':
+    try:
+        oscid = startOsc()
+        createGPSService()
+        startGPS()
     except NotImplementedError:
         import traceback
         traceback.print_exc()
@@ -85,6 +192,13 @@ if __name__ == '__main__':
     while not isStopped:
         try:
             osc.readQueue(oscid)
+            processBattery()
+            curTime = datetime.datetime.now()
+            if gpsRunning == False and isStopped == False:
+                checkAcceleroMeter()
+            elif lastGPSMeasuredAt and lastGPSMeasuredAt + datetime.timedelta(seconds=140) <= datetime.datetime.now():        #if we didn't receive a GPS fix in 140 seconds, then we are still at the same location, start the accelerometer and stop the GPS to save battery
+                pauseGPSService(True)
             sleep(.1)
-        except:
+        except Exception as e:
             logging.exception('main loop failure')
+            sendMsg('main loop failure: ' + e.message)
