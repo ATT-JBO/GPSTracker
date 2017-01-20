@@ -43,6 +43,7 @@ def on_MQTTSubscribed(client, userdata, mid, granted_qos):
 _mqttClient = None
 #_httpServerName = None
 _httpClient = None
+_httpServerName = Non
 
 #public
 #######
@@ -60,10 +61,23 @@ ClientKey = None
 
 def connect(httpServer="api.allthingstalk.io"):
     '''connect with the http server'''
-    global _httpClient#, _httpServerName                                         # we assign to these vars first, so we need to make certain that they are declared as global, otherwise we create new local vars
-    _httpClient = httplib.HTTPConnection(httpServer)
-    #_httpServerName = httpServer
+    global _httpClient, _httpServerName                                         # we assign to these vars first, so we need to make certain that they are declared as global, otherwise we create new local vars
+    _httpServerName = httpServer
+    _connect()
+
+def _connect():
+    global _httpClient
+    _httpClient = httplib.HTTPConnection(_httpServerName)
     logging.info("connected with http server")
+
+def close():
+    """
+    close the http connection
+    :return:
+    """
+    global _httpClient
+    _httpClient.close()
+    _httpClient = None
 
 def addAsset(id, name, description, isActuator, assetType, style = "Undefined"):
     '''Add an asset to the device.
@@ -165,18 +179,22 @@ def sendValueHTTP(value, assetId):
     global DeviceId
     if not DeviceId:
         raise Exception("DeviceId not specified")
-    body = _buildPayLoadHTTP(value)
-    headers = {"Content-type": "application/json", "Auth-ClientKey": ClientKey, "Auth-ClientId": ClientId}
-    url = "/device/" + DeviceId + "/asset/" + str(assetId) + "/state"
+    _connect()                                          # we keep the connection closed to save battey power, so reopen at start of send
+    try:
+        body = _buildPayLoadHTTP(value)
+        headers = {"Content-type": "application/json", "Auth-ClientKey": ClientKey, "Auth-ClientId": ClientId}
+        url = "/device/" + DeviceId + "/asset/" + str(assetId) + "/state"
 
-    logging.info("HTTP PUT: " + url)
-    logging.info("HTTP HEADER: " + str(headers))
-    logging.info("HTTP BODY:" + body)
-    _httpClient.request("PUT", url, body, headers)
-    response = _httpClient.getresponse()
-    logging.info(str((response.status, response.reason)))
-    jsonStr =  response.read()
-    logging.info(jsonStr)
+        logging.info("HTTP PUT: " + url)
+        logging.info("HTTP HEADER: " + str(headers))
+        logging.info("HTTP BODY:" + body)
+        _httpClient.request("PUT", url, body, headers)
+        response = _httpClient.getresponse()
+        logging.info(str((response.status, response.reason)))
+        jsonStr =  response.read()
+        logging.info(jsonStr)
+    finally:
+        close()
 
 def sendCommandTo(value, assetId):
     '''
@@ -249,9 +267,8 @@ def subscribe(mqttServer = "api.allthingstalk.io", port = 1883):
 	   mqttServer: (optional): the address of the mqtt server. Only supply this value if you want to a none standard server.
 	   port: (optional) the port number to communicate on with the mqtt server.
     '''
-    global _mqttClient, _httpClient                                             # we assign to these vars first, so we need to make certain that they are declared as global, otherwise we create new local vars
-    _httpClient.close()
-    _httpClient = None                                                             #the http client is no longer used, so free the mem.
+    global _mqttClient                                             # we assign to these vars first, so we need to make certain that they are declared as global, otherwise we create new local vars
+    close()
     if len(DeviceId) > 23:
         mqttId = DeviceId[:23]
     else:
