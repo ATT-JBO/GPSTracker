@@ -11,10 +11,12 @@ class Credentials():
         self.password = ''
         self.server = ''
         self.broker = ''
+        self.groundid = ''
 
 
 credentials = Credentials()
-credentials.userName = "Geotrigger"
-credentials.password = "Att953953"
-credentials.broker = "broker.smartliving.io"
-credentials.server = "api.smartliving.io"
+credentials.userName = "sander"
+credentials.password = "attsander"
+credentials.broker = "tasty.allthingstalk.io"
+credentials.server = "tasty.allthingstalk.io"
+credentials.groundid =  "92SkKNHz2eaIqgJUnC15AdIv"

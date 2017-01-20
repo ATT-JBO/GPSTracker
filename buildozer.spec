@@ -29,7 +29,7 @@ source.exclude_dirs = tests, bin
 #version.filename = %(source.dir)s/main.py
 
 # (str) Application versioning (method 2)
-version = 1.0.0
+version = 2.0.0
 
 # (list) Application requirements
 # comma seperated e.g. requirements = sqlite3,kivy
@@ -48,7 +48,7 @@ requirements = kivy,paho-mqtt, plyer
 orientation = all
 
 # (bool) Indicate if the application should be fullscreen or not
-fullscreen = 1
+fullscreen = 0
 
 
 #

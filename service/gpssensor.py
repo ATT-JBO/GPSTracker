@@ -96,27 +96,3 @@ class GPSCoarseSensor(GPSBase):
                     Looper.getMainLooper())
                 logging.info("started coarse")
                 break
-
-class GPSFineSensor(GPSBase):
-    def start(self, minTime = 1000, minDistance = 1):
-        providers = self._location_manager.getProviders(False).toArray()
-        for provider in providers:
-            prov = self._location_manager.getProvider(provider)
-            if prov.getAccuracy() == 1:    # fine
-                self._location_manager.requestLocationUpdates(
-                    provider,
-                    minTime,  # minTime, in milliseconds
-                    minDistance,  # minDistance, in meters
-                    self._location_listener,
-                    Looper.getMainLooper())
-                logging.info("started fine")
-                break
-        #logging.info("starting fine")
-        #self._location_manager.requestLocationUpdates(
-         #   'gps',
-         #   minTime,  # minTime, in milliseconds
-         #   minDistance,  # minDistance, in meters
-         #   self._location_listener,
-         #   Looper.getMainLooper())
-
-

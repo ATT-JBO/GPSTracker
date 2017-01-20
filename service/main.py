@@ -32,7 +32,8 @@ isStopped = False
 def on_location(**kwargs):
     try:
         if iot.DeviceId:                                            # could be that we are not yet connected.
-            iot.send("{lat},{lon}".format(**kwargs), gpsId)
+            value = {"lat": kwargs['lat'], "lon": kwargs['lon']}
+            iot.sendValueHTTP(value, gpsId)
     except Exception as e:
         logging.exception("on_location failed")
 
@@ -40,9 +41,13 @@ def device_callback(message, *args):
     logging.info("got a message! %s" % message)
     iot.DeviceId = message
     if iot.DeviceId:
-        iot.connect()
-        iot.addAsset(gpsId, "location - new", "location, using new lib", False, "string")
-        iot.subscribe()
+        iot.connect("tasty.allthingstalk.io")
+        if gpsService:
+            if isStopped == False:
+                gpsService.stop()
+            interval = iot.getAssetState("interval")
+            gpsService.start(int(interval) * 1000, 30)
+            logging.info("gps started")
 
 def stop_callback(message, *args):
     global isStopped, gpsService
@@ -53,6 +58,8 @@ def stop_callback(message, *args):
         isStopped = True
         logging.info("stopped gps")
 
+
+
 gpsService = None
 
 if __name__ == '__main__':
@@ -62,22 +69,15 @@ if __name__ == '__main__':
         osc.bind(oscid, device_callback, '/device')
         osc.bind(oscid, stop_callback, '/stop')
         splitVal = os.getenv('PYTHON_SERVICE_ARGUMENT').split('|')
+        gpsService = sensors.GPSCoarseSensor()
+        if gpsService:
+            gpsService.configure(on_location=on_location)
         if len(splitVal) > 3:
             iot.ClientId = splitVal[2]
             iot.ClientKey = splitVal[3]
             device_callback(splitVal[1])
-        if splitVal[0] == 'fine':
-            gpsService = sensors.GPSFineSensor()
-        elif splitVal[0] == 'coarse':
-            gpsService = sensors.GPSCoarseSensor()
         else:
-            gpsService = None
-        if gpsService:
-            gpsService.configure(on_location=on_location)
-            gpsService.start(15000, 15)
-            logging.info("gps started")
-        else:
-            logging.error("unknown gps logging level requested: " + level)
+            logging.error("no credentials, can't start gps")
     except NotImplementedError:
         import traceback
         traceback.print_exc()

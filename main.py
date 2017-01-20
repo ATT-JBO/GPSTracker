@@ -34,42 +34,6 @@ IPCPort = 3000
 IPCServicePort = 3001
 
 
-class CredentialsDialog(Popup):
-    "set credentials"
-    userNameInput = ObjectProperty()
-    pwdInput = ObjectProperty()
-
-    serverInput = ObjectProperty()
-    brokerInput = ObjectProperty()
-
-    def __init__(self, credentials, callback, **kwargs):
-        self.callback = callback
-        super(CredentialsDialog, self).__init__(**kwargs)
-        if credentials:
-            self.userNameInput.text = credentials.userName
-            self.pwdInput.text = credentials.password
-            if hasattr(credentials, 'server') and credentials.server:
-                self.serverInput.text = credentials.server
-            else:
-                self.serverInput.text = 'api.smartliving.io'
-            if hasattr(credentials, 'broker') and credentials.broker:
-                self.brokerInput.text = credentials.broker
-            else:
-                self.brokerInput.text = 'broker.smartliving.io'
-        else:
-            self.serverInput.text = 'api.smartliving.io'
-            self.brokerInput.text = 'broker.smartliving.io'
-
-    def dismissOk(self):
-        if self.callback:
-            credentials = Credentials()
-            credentials.userName = self.userNameInput.text
-            credentials.password = self.pwdInput.text
-            credentials.server = self.serverInput.text
-            credentials.broker = self.brokerInput.text
-            self.callback(credentials)
-        self.dismiss()
-
 def isServiceRunning():
     '''check if service is running '''
     from plyer.platforms.android import activity
@@ -120,24 +84,6 @@ class MainWindow(Widget):
                 self.asset = self.config.get('general', 'asset')
             else:
                 self.asset = None
-
-            if self.config.has_option('general', 'userName'):
-                data.credentials.userName = self.config.get('general', 'userName')
-            else:
-                data.credentials.userName = "Geotrigger"
-            if self.config.has_option('general', 'password'):
-                data.credentials.password = self.config.get('general', 'password')
-            else:
-                data.credentials.password = "Att953953"
-            if self.config.has_option('general', 'server'):
-                data.credentials.server = self.config.get('general', 'server')
-            else:
-                data.credentials.server = "api.smartliving.io"
-            if self.config.has_option('general', 'broker'):
-                data.credentials.broker = self.config.get('general', 'broker')
-            else:
-                data.credentials.broker = "broker.smartliving.io"
-
         else:
             self.device = None
             self.asset = None
@@ -156,40 +102,23 @@ class MainWindow(Widget):
             self.config.add_section('general')
         self.config.set('general', 'device', self.device)
         self.config.set('general', 'asset', self.asset)
-        self.config.set('general', 'userName', data.credentials.userName)
-        self.config.set('general', 'password', data.credentials.password)
-        self.config.set('general', 'server', data.credentials.server)
-        self.config.set('general', 'broker', data.credentials.broker)
         with open(appConfigFileName, 'w') as f:
             self.config.write(f)
 
     def showSelectDevice(self, relativeTo):
-        grounds = IOT.getGrounds(False)
 
         dropdown = DropDown() # auto_width=False, width='140dp'
-        for ground in grounds:
-            devices = IOT.getDevices(ground['id'])
-            for dev in devices:
-                btn = Button(size_hint_y=None, height='32dp')
-                btn.DeviceId = dev['id']
-                if dev['title']:
-                    btn.text=dev['title']             # for old devices that didn't ahve a title yet.
-                else:
-                    btn.text=dev['name']
-                btn.bind(on_release=lambda btn: self.selectDevice(btn.parent.parent, btn.DeviceId, btn.text))
-                dropdown.add_widget(btn)
+        devices = IOT.getDevices(data.credentials.groundid)
+        for dev in devices:
+            btn = Button(size_hint_y=None, height='32dp')
+            btn.DeviceId = dev['id']
+            if dev['title']:
+                btn.text=dev['title']             # for old devices that didn't ahve a title yet.
+            else:
+                btn.text=dev['name']
+            btn.bind(on_release=lambda btn: self.selectDevice(btn.parent.parent, btn.DeviceId, btn.text))
+            dropdown.add_widget(btn)
         dropdown.open(relativeTo)
-
-    def showCredentialsDlg(self):
-        dlg = CredentialsDialog(data.credentials, self.credentialsChanged)
-        dlg.open()
-
-    def credentialsChanged(self, newCredentials):
-        IOT.disconnect(False)
-        data.credentials = newCredentials
-        connect()
-        self.updateDevName()
-        self.saveConfig()
 
     def selectDevice(self, dropdown, deviceId, title):
         if dropdown:
@@ -201,7 +130,7 @@ class MainWindow(Widget):
         self.asset = None
         if self.device:
             assets = IOT.getAssets(self.device)
-            locationAsset = [asset for asset in assets if str(asset['name']).startswith('Destination') ]
+            locationAsset = [asset for asset in assets if str(asset['name']).startswith('prediction_distance_json') ]
             if locationAsset and len(locationAsset) > 0:
                 self.asset = str(locationAsset[0]['id'])
                 IOT.subscribe(self.asset, self.destinationChanged)

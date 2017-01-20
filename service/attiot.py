@@ -58,7 +58,7 @@ DeviceId = None
 #the key that the ATT platform generated for the specified client
 ClientKey = None
 
-def connect(httpServer="api.smartliving.io"):
+def connect(httpServer="api.allthingstalk.io"):
     '''connect with the http server'''
     global _httpClient#, _httpServerName                                         # we assign to these vars first, so we need to make certain that they are declared as global, otherwise we create new local vars
     _httpClient = httplib.HTTPConnection(httpServer)
@@ -208,13 +208,10 @@ def getAssetState(asset):
     :type asset: string or int
     :returns a json object containing the last recorded data.
     '''
-    if type(asset) == types.IntType:
-        global DeviceId
-        if not DeviceId:
-            raise Exception("DeviceId not specified")
-        url = "/device/" + DeviceId + "/asset/" + str(asset) +  "/state"
-    else:
-        url = "/asset/" + asset + "/state"
+    global DeviceId
+    if not DeviceId:
+        raise Exception("DeviceId not specified")
+    url = "/device/" + DeviceId + "/asset/" + str(asset) + "/state"
     return doHTTPGet(url, "")
 
 
@@ -247,7 +244,7 @@ def getAssets():
 
     return doHTTPGet(url, "")
 
-def subscribe(mqttServer = "broker.smartliving.io", port = 1883):
+def subscribe(mqttServer = "api.allthingstalk.io", port = 1883):
     '''start the mqtt client and make certain that it can receive data from the IOT platform
 	   mqttServer: (optional): the address of the mqtt server. Only supply this value if you want to a none standard server.
 	   port: (optional) the port number to communicate on with the mqtt server.

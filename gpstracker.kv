@@ -61,11 +61,6 @@
         cols: 1
         padding: '8dp'
         spacing: '8dp'
-        #Button:
-        #    text:'set credentials'
-        #    size_hint_y: None
-        #    height: '40dp'
-        #    on_release: root.showCredentialsDlg()
         Button:
             text: root.selectedDeviceName
             size_hint_y: None
@@ -79,11 +74,7 @@
             size_hint_y: None
             height: '40dp'
             Button:
-                text: 'fine'
-                on_release: root.startService('fine')
-                disabled: root.isRunning
-            Button:
-                text: 'coarse'
+                text: 'start'
                 on_release: root.startService('coarse')
                 disabled: root.isRunning
             Button:
