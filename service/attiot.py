@@ -43,7 +43,7 @@ def on_MQTTSubscribed(client, userdata, mid, granted_qos):
 _mqttClient = None
 #_httpServerName = None
 _httpClient = None
-_httpServerName = Non
+_httpServerName = None
 
 #public
 #######

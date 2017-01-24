@@ -77,7 +77,16 @@ def device_callback(message, *args):
             iot.addAsset(stateId, "state", "current state of the device", False, "string")
             iot.addAsset(gpsCoordId, "location - coordinates", "location, using new lib, expresed in coordinates", False, '{"type": "object","properties": {"lat": { "type": "number" },"lon": { "type": "number" }}}')
             iot.addAsset(batteryId, "battery level", "current battery level", False, "number")
-            gpsMinTime = iot.getAssetState("interval") * 1000
+            try:
+                minTime = iot.getAssetState("interval")
+                if not minTime:
+                    minTime = 60
+                else:
+                    minTime = minTime['value']
+            except:
+                logging.exception("failed to get interval, switching to default")
+                minTime = 60
+            gpsMinTime = minTime * 1000
             iot.close()                 # keep connection closed for battery consumption optimisation.
     except Exception as e:
         sendMsg('failed to connect to ATT: ' + e.message)

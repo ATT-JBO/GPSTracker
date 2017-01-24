@@ -16,6 +16,7 @@ class Credentials():
 
 credentials = Credentials()
 credentials.userName = "sander"
+credentials.deviceAuth = "sander_HUD79lYb"
 credentials.password = "attsander"
 credentials.broker = "tasty.allthingstalk.io"
 credentials.server = "tasty.allthingstalk.io"

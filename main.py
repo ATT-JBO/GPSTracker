@@ -34,6 +34,7 @@ appConfigFileName = 'app.config'
 IPCPort = 3000
 IPCServicePort = 3001
 
+IOT._app_id = "web"     # for debugging on tasty.
 
 def isServiceRunning():
     '''check if service is running '''
@@ -154,7 +155,7 @@ class MainWindow(Widget):
             if not self.service:
                 self.service = AndroidService('my gps service', 'running')
             if self.device:
-                self.service.start(level + '|' + self.device + '|' + data.credentials.userName + '|' + IOT._brokerPwd)
+                self.service.start(level + '|' + self.device + '|' + data.credentials.deviceAuth + '|' + IOT._brokerPwd)
             else:
                 self.service.start(level)
 

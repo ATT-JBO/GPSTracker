@@ -27,6 +27,7 @@ _expires_in = None
 _clientId = None
 _brokerUser = None
 _brokerPwd = None
+_app_id = "maker"
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, rc):
@@ -172,7 +173,7 @@ def connectHttp(username, pwd, httpServer):
 
 def login(username, pwd):
     url = "/login"
-    body = "grant_type=password&username=" + username + "&password=" + pwd + "&client_id=maker"
+    body = "grant_type=password&username=" + username + "&password=" + pwd + "&client_id=" + _app_id
     print("HTTP POST: " + url)
     print("HTTP BODY: " + body)
     _httpClient.request("POST", url, body, {"Content-type": "application/json"})
@@ -198,7 +199,7 @@ def refreshToken():
     """no need for error handling, is called within doHTTPRequest, which does the error handling"""
     global _access_token, _refresh_token
     url = "/login"
-    body = "grant_type=refresh_token&refresh_token=" + _refresh_token + "&client_id=dashboard"
+    body = "grant_type=refresh_token&refresh_token=" + _refresh_token + "&client_id=" + _app_id
     print("HTTP POST: " + url)
     print("HTTP BODY: " + body)
     _httpClient.request("POST", url, body, {"Content-type": "application/json"})
