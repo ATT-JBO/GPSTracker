@@ -46,11 +46,11 @@ lastGPSMeasuredAt = None
 def on_location(**kwargs):
     try:
         global prevGPSData, lastGPSMeasuredAt
-        if prevGPSData and round(kwargs['lat'], 4) == prevGPSData['lat'] and round(kwargs['lon'], 4) == prevGPSData['lon']: #same location, so stop the gps
+        if prevGPSData and round(kwargs['lat'], 4) == prevGPSData['lat'] and round(kwargs['long'], 4) == prevGPSData['long']: #same location, so stop the gps
             pauseGPSService()
         else:
             lastGPSMeasuredAt = datetime.datetime.now()
-        prevGPSData = {'lat': round(kwargs['lat'], 4), 'lon': round(kwargs['lon'], 4)}
+        prevGPSData = {'lat': round(kwargs['lat'], 4), 'long': round(kwargs['lon'], 4)}
         if iot.DeviceId:                                            # could be that we are not yet connected.
             iot.sendValueHTTP(prevGPSData, gpsCoordId)                  # for easy tracking on a map.
     except Exception as e:
@@ -75,7 +75,7 @@ def device_callback(message, *args):
         if iot.DeviceId:
             iot.connect("tasty.allthingstalk.io")
             iot.addAsset(stateId, "state", "current state of the device", False, "string")
-            iot.addAsset(gpsCoordId, "location - coordinates", "location, using new lib, expresed in coordinates", False, '{"type": "object","properties": {"lat": { "type": "number" },"lon": { "type": "number" }}}')
+            iot.addAsset(gpsCoordId, "location - coordinates", "location, using new lib, expresed in coordinates", False, '{"type": "object","properties": {"lat": { "type": "number" },"long": { "type": "number" }}}')
             iot.addAsset(batteryId, "battery level", "current battery level", False, "number")
             try:
                 minTime = iot.getAssetState("interval")

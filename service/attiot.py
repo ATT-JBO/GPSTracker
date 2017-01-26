@@ -76,8 +76,9 @@ def close():
     :return:
     """
     global _httpClient
-    _httpClient.close()
-    _httpClient = None
+    if _httpClient:
+        _httpClient.close()
+        _httpClient = None
 
 def addAsset(id, name, description, isActuator, assetType, style = "Undefined"):
     '''Add an asset to the device.
@@ -164,7 +165,7 @@ def getPrimaryAsset():
     if not DeviceId:
         raise Exception("DeviceId not specified")
     url = "/Device/" + DeviceId + "/assets?style=primary"
-    return doHTTPGet(url, "")
+    return doHTTPRequest(url, "")
 
 
 def _buildPayLoadHTTP(value):
@@ -179,22 +180,9 @@ def sendValueHTTP(value, assetId):
     global DeviceId
     if not DeviceId:
         raise Exception("DeviceId not specified")
-    _connect()                                          # we keep the connection closed to save battey power, so reopen at start of send
-    try:
-        body = _buildPayLoadHTTP(value)
-        headers = {"Content-type": "application/json", "Auth-ClientKey": ClientKey, "Auth-ClientId": ClientId}
-        url = "/device/" + DeviceId + "/asset/" + str(assetId) + "/state"
-
-        logging.info("HTTP PUT: " + url)
-        logging.info("HTTP HEADER: " + str(headers))
-        logging.info("HTTP BODY:" + body)
-        _httpClient.request("PUT", url, body, headers)
-        response = _httpClient.getresponse()
-        logging.info(str((response.status, response.reason)))
-        jsonStr =  response.read()
-        logging.info(jsonStr)
-    finally:
-        close()
+    body = _buildPayLoadHTTP(value)
+    url = "/device/" + DeviceId + "/asset/" + str(assetId) + "/state"
+    doHTTPRequest(url, body, "PUT")
 
 def sendCommandTo(value, assetId):
     '''
@@ -230,24 +218,84 @@ def getAssetState(asset):
     if not DeviceId:
         raise Exception("DeviceId not specified")
     url = "/device/" + DeviceId + "/asset/" + str(asset) + "/state"
-    return doHTTPGet(url, "")
+    return doHTTPRequest(url, "")
 
 
-def doHTTPGet(url, content):
-    headers = {"Content-type": "application/json", "Auth-ClientKey": ClientKey, "Auth-ClientId": ClientId}
-    logging.info("HTTP GET: " + url)
-    logging.info("HTTP HEADER: " + str(headers))
-    logging.info("HTTP BODY: None")
-    _httpClient.request("GET", url, content, headers)
-    response = _httpClient.getresponse()
-    logging.info(str((response.status, response.reason)))
-    jsonStr =  response.read()
-    if response.status == 200:
-        logging.info(jsonStr)
-        return json.loads(jsonStr)
-    else:
-        logging.error(jsonStr)
-        return None
+def _processError(str):
+    if str:
+        try:
+            obj = json.loads(str)
+        except:
+            raise Exception(str)
+        if obj:
+            if 'error_description' in obj:
+                raise Exception(obj['error_description'])
+            elif 'message' in obj:
+                raise Exception(obj['message'])
+
+def doHTTPRequest(url, content, method="GET"):
+    """send the data and check the result
+    :param url: the url to do the http request to, ex: /login
+    :param content: the body
+    :param method: GET, PUT, POST, DELETE
+    :return:
+    """
+    #Some multi threading applications can have issues with the server closing the connection, if this happens
+    # we try again
+
+    def processUnauthorized(badStatusLineCount):
+        badStatusLineCount += 1
+        if badStatusLineCount < 10:  # we need to make certain that we don't get stuck in an endless loop, so only try to reconnect a couple of times.
+            self._refreshToken()
+            return badStatusLineCount
+        else:
+            raise
+
+    _connect()  # we keep the connection closed to save battey power, so reopen at start of send
+    try:
+        badStatusLineCount = 0  # keep track of the amount of 'badStatusLine' exceptions we received. If too many raise to caller, otherwise retry.
+        success = False
+        while not success:
+            try:
+                headers = {"Content-type": "application/json", "Auth-ClientKey": ClientKey, "Auth-ClientId": ClientId}
+                logging.info("HTTP " + method + ': ' + url)
+                logging.info("HTTP HEADER: " + str(headers))
+                logging.info("HTTP BODY: " + content)
+                _httpClient.request(method, url, content, headers)
+                response = _httpClient.getresponse()
+                logging.info(str((response.status, response.reason)))
+                jsonStr = response.read()
+                logging.info(jsonStr)
+                if response.status == 200:
+                    if jsonStr:
+                        return json.loads(jsonStr)
+                    else:
+                        return  # get out of the ethernal loop
+                elif response.status == 401:
+                    badStatusLineCount = processUnauthorized(badStatusLineCount)
+                else:
+                    _processError(jsonStr)
+            except httplib.UNAUTHORIZED:
+                badStatusLineCount = processUnauthorized(badStatusLineCount)
+            except httplib.BadStatusLine:  # a bad status line is probably due to the connection being closed. If it persists, raise the exception.
+                badStatusLineCount += 1
+                if badStatusLineCount < 10:
+                    close()
+                    _connect()
+                else:
+                    raise
+            except (SocketError) as e:
+                if e.errno != errno.ECONNRESET:  # if it's error 104 (connection reset), then we try to resend it, cause we just reconnected
+                    raise
+                else:
+                    close()
+                    _connect()
+            except:
+                raise
+        else:
+            raise Exception("Not logged in: please check your credentials")
+    finally:
+        close()
 
 
 def getAssets():
@@ -260,7 +308,7 @@ def getAssets():
         raise Exception("DeviceId not specified")
     url = "/Device/" + DeviceId + "/assets"
 
-    return doHTTPGet(url, "")
+    return doHTTPRequest(url, "")
 
 def subscribe(mqttServer = "api.allthingstalk.io", port = 1883):
     '''start the mqtt client and make certain that it can receive data from the IOT platform
