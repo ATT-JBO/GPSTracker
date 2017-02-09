@@ -254,6 +254,7 @@ def doHTTPRequest(url, content, method="GET"):
     _connect()  # we keep the connection closed to save battey power, so reopen at start of send
     try:
         badStatusLineCount = 0  # keep track of the amount of 'badStatusLine' exceptions we received. If too many raise to caller, otherwise retry.
+        socketErrorCount = 0
         success = False
         while not success:
             try:
@@ -285,11 +286,12 @@ def doHTTPRequest(url, content, method="GET"):
                 else:
                     raise
             except (SocketError) as e:
-                if e.errno != errno.ECONNRESET:  # if it's error 104 (connection reset), then we try to resend it, cause we just reconnected
-                    raise
-                else:
+                socketErrorCount += 1
+                if socketErrorCount < 10:
                     close()
                     _connect()
+                else:
+                    raise
             except:
                 raise
         else:
