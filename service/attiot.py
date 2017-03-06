@@ -9,6 +9,7 @@ import httplib                                 # for http comm
 import types as types                          # to check on type info
 import json                                    # in case the data we need to send is complex
 import logging
+from socket import error as SocketError         # for http error handling
 
 
 # The callback for when the client receives a CONNACK response from the server.

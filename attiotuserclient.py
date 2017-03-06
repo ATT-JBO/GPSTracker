@@ -21,6 +21,7 @@ _callbacks = {}
 _get_assets_callback = None
 
 _curHttpServer = None
+_curMqtServer = None
 _access_token = None
 _refresh_token = None
 _expires_in = None
@@ -28,6 +29,9 @@ _clientId = None
 _brokerUser = None
 _brokerPwd = None
 _app_id = "maker"
+
+_user_name = None
+_pwd = None
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, rc):
@@ -66,7 +70,10 @@ def connect(username, pwd, httpServer, mqttServer):
 	   mqttServer: (optional): the address of the mqtt server. Only supply this value if you want to a none standard server.
 	   port: (optional) the port number to communicate on with the mqtt server.
     '''
-    global _brokerPwd, _brokerUser
+    global _brokerPwd, _brokerUser, _user_name, _pwd,_curMqtServer
+    _user_name = username
+    _pwd = pwd
+    _curMqtServer = mqttServer
     mqttCredentials = connectHttp(username, pwd, httpServer)
     if not "rmq:clientId" in mqttCredentials:
         logging.error("username not specified, can't connect to broker")
@@ -274,7 +281,10 @@ def doHTTPRequest(url, content, method = "GET"):
     while not success:
         try:
             if _expires_in < time.time():               #need to refesh the token first
-                refreshToken()
+                try:
+                    refreshToken()
+                except:
+                    connect(_user_name, _pwd, _curHttpServer, _curMqtServer)        # reconnect after a fatal refresh error (refresh token is gone in this case
             headers = {"Content-type": "application/json", "Authorization": "Bearer " + _access_token}
             print("HTTP " + method + ': ' + url)
             print("HTTP HEADER: " + str(headers))

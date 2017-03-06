@@ -17,6 +17,7 @@ from plyer import accelerometer
 from plyer import battery
 from kivy.lib import osc
 import datetime
+from threading import Lock
 
 import gpssensor as sensors
 
@@ -42,20 +43,28 @@ prevGPSData = None
 prevBattery = None
 prevAccel = None
 lastGPSMeasuredAt = None
+message_lock = Lock()
 
 def on_location(**kwargs):
+    message_lock.acquire()
     try:
-        global prevGPSData, lastGPSMeasuredAt
-        if prevGPSData and round(kwargs['lat'], 4) == prevGPSData['lat'] and round(kwargs['long'], 4) == prevGPSData['long']: #same location, so stop the gps
-            pauseGPSService()
-        else:
-            lastGPSMeasuredAt = datetime.datetime.now()
-        prevGPSData = {'lat': round(kwargs['lat'], 4), 'long': round(kwargs['lon'], 4)}
-        if iot.DeviceId:                                            # could be that we are not yet connected.
-            iot.sendValueHTTP(prevGPSData, gpsCoordId)                  # for easy tracking on a map.
-    except Exception as e:
-        sendMsg('on_location failed: ' + e.message)
-        logging.exception("on_location failed")
+        try:
+            global prevGPSData, lastGPSMeasuredAt
+            if prevGPSData and round(kwargs['lat'], 4) == prevGPSData['lat'] and round(kwargs['long'], 4) == prevGPSData['long']: #same location, so stop the gps
+                pauseGPSService()
+            else:
+                lastGPSMeasuredAt = datetime.datetime.now()
+            prevGPSData = {'lat': round(kwargs['lat'], 4), 'long': round(kwargs['lon'], 4)}
+            if iot.DeviceId:                                            # could be that we are not yet connected.
+                iot.sendValueHTTP(prevGPSData, gpsCoordId)                  # for easy tracking on a map.
+        except Exception as e:
+            try:
+                logging.exception("on_location failed")
+                iot.sendValueHTTP('on_location failed: ' + str(e), stateId)
+            except:
+                logging.exception("logging failed")
+    finally:
+        message_lock.release()
 
 #def isBetterLocation(prev, current):
 #    if not prev:
@@ -70,27 +79,34 @@ def sendMsg(message):
 
 def device_callback(message, *args):
     global gpsMinTime
+    message_lock.acquire()
     try:
-        iot.DeviceId = message
-        if iot.DeviceId:
-            iot.connect("tasty.allthingstalk.io")
-            iot.addAsset(stateId, "state", "current state of the device", False, "string")
-            iot.addAsset(gpsCoordId, "location - coordinates", "location, using new lib, expresed in coordinates", False, '{"type": "object","properties": {"lat": { "type": "number" },"long": { "type": "number" }}}')
-            iot.addAsset(batteryId, "battery level", "current battery level", False, "number")
-            try:
-                minTime = iot.getAssetState("interval")
-                if not minTime:
+        try:
+            iot.DeviceId = message
+            if iot.DeviceId:
+                iot.connect("tasty.allthingstalk.io")
+                iot.addAsset(stateId, "state", "current state of the device", False, "string")
+                iot.addAsset(gpsCoordId, "location - coordinates", "location, using new lib, expresed in coordinates", False, '{"type": "object","properties": {"lat": { "type": "number" },"long": { "type": "number" }}}')
+                iot.addAsset(batteryId, "battery level", "current battery level", False, "number")
+                try:
+                    minTime = iot.getAssetState("interval")
+                    if not minTime:
+                        minTime = 60
+                    else:
+                        minTime = minTime['value']
+                except:
+                    logging.exception("failed to get interval, switching to default")
                     minTime = 60
-                else:
-                    minTime = minTime['value']
+                gpsMinTime = minTime * 1000
+                iot.close()                 # keep connection closed for battery consumption optimisation.
+        except Exception as e:
+            try:
+                sendMsg('failed to connect to ATT: ' + e.message)
+                logging.exception("failed to connect to ATT")
             except:
-                logging.exception("failed to get interval, switching to default")
-                minTime = 60
-            gpsMinTime = minTime * 1000
-            iot.close()                 # keep connection closed for battery consumption optimisation.
-    except Exception as e:
-        sendMsg('failed to connect to ATT: ' + e.message)
-        logging.exception("failed to connect to ATT")
+                logging.exception("failed to connect to ATT")
+    finally:
+        message_lock.release()
 
 def stop_callback(message, *args):
     global gpsService, isStopped
@@ -159,14 +175,21 @@ def startOsc():
 
 def processBattery():
     global prevBattery
+    message_lock.acquire()
     try:
-        curVal = battery.status['percentage']
-        if not prevBattery or curVal != prevBattery:
-            iot.sendValueHTTP(curVal, batteryId)
-        prevBattery = curVal
-    except Exception as e:
-        sendMsg('failed to update battery: ' + e.message)
-        logging.exception("failed to update battery")
+        try:
+            curVal = battery.status['percentage']
+            if not prevBattery or curVal != prevBattery:
+                iot.sendValueHTTP(curVal, batteryId)
+            prevBattery = curVal
+        except Exception as e:
+            try:
+                iot.sendValueHTTP('failed to update battery: ' + str(e), stateId)
+                logging.exception("failed to update battery")
+            except:
+                logging.exception("failed to update battery")
+    finally:
+        message_lock.release()
 
 
 def checkAcceleroMeter():
@@ -200,9 +223,16 @@ if __name__ == '__main__':
             curTime = datetime.datetime.now()
             if gpsRunning == False and isStopped == False:
                 checkAcceleroMeter()
-            elif lastGPSMeasuredAt and lastGPSMeasuredAt + datetime.timedelta(seconds=140) <= curTime:        #if we didn't receive a GPS fix in 140 seconds, then we are still at the same location, start the accelerometer and stop the GPS to save battery
+            elif lastGPSMeasuredAt and lastGPSMeasuredAt + datetime.timedelta(seconds=(gpsMinTime / 1000)*2) <= curTime:        #if we didn't receive a GPS fix in time, then we are still at the same location, start the accelerometer and stop the GPS to save battery
                 pauseGPSService(True)
-            sleep(.2)
+            sleep(.3)
         except Exception as e:
-            logging.exception('main loop failure')
-            sendMsg('main loop failure: ' + e.message)
+            message_lock.acquire()
+            try:
+                try:
+                    iot.sendValueHTTP('main loop failure: ' + str(e), stateId)
+                    logging.exception('main loop failure')
+                except:
+                    logging.exception('main loop failure')
+            finally:
+                message_lock.release()
